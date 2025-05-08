@@ -29,7 +29,7 @@ Resposta da IA:"""
     )
     return resposta.choices[0].message.content.strip()
 
-@app.route("/", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
     mensagem = data.get("text", {}).get("message", "")
