@@ -3,7 +3,6 @@ import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-
 SESSOES = {}
 
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
@@ -19,6 +18,20 @@ def enviar_mensagem(telefone, mensagem):
     payload = {"phone": telefone, "message": mensagem}
     requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
 
+def enviar_botoes(telefone):
+    payload = {
+        "phone": telefone,
+        "message": "Sobre o que você gostaria de saber?",
+        "buttons": [
+            {"label": "📐 Tamanhos e preços", "value": "precos"},
+            {"label": "💰 Formas de pagamento", "value": "pagamento"},
+            {"label": "📍 Localização", "value": "localizacao"},
+            {"label": "📸 Imagens e vídeos", "value": "midia"},
+            {"label": "👤 Falar com um consultor", "value": "consultor"}
+        ]
+    }
+    requests.post(f"{API_BASE}/send-button", headers=HEADERS, json=payload)
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -26,7 +39,7 @@ def webhook():
         return jsonify({"status": "ignorado"})
 
     numero = data.get("phone") or data.get("message", {}).get("from")
-    mensagem = data.get("text", {}).get("message", "") or data.get("message", {}).get("text", {}).get("body", "")
+    mensagem = data.get("text", {}).get("message") or data.get("buttonResponse", {}).get("value") or data.get("message", "")
     if not numero or not mensagem:
         return jsonify({"status": "sem dados"})
 
@@ -39,13 +52,22 @@ def webhook():
 
     elif sessao["etapa"] == "nome":
         sessao["nome"] = mensagem.strip().split(" ")[0].capitalize()
-        enviar_mensagem(numero, f"Prazer em te conhecer, {sessao['nome']}! 😊\nVocê está interessado em investir ou construir sede própria?")
-        sessao["etapa"] = "interesse"
+        enviar_botoes(numero)
+        sessao["etapa"] = "botao"
 
-    elif sessao["etapa"] == "interesse":
-        sessao["interesse"] = mensagem.strip()
-        enviar_mensagem(numero, "Qual o valor de entrada que você está pensando em investir?")
-        sessao["etapa"] = "entrada"
+    elif sessao["etapa"] == "botao":
+        if mensagem == "precos":
+            enviar_mensagem(numero, "Os lotes do Avanti começam a partir de 500 m². O valor exato depende da localização. Posso te enviar uma proposta personalizada — posso seguir com isso?")
+        elif mensagem == "pagamento":
+            enviar_mensagem(numero, "Temos financiamento direto com o empreendedor. Qual valor de entrada você pretende investir?")
+            sessao["etapa"] = "entrada"
+        elif mensagem == "localizacao":
+            enviar_mensagem(numero, "📍 O Avanti está às margens da rodovia em Lagoa da Prata: https://goo.gl/maps/FakeLink")
+        elif mensagem == "midia":
+            enviar_mensagem(numero, "Veja as imagens: https://simbadigital.com.br/imagem/imagem1.webp\n🎥 Vídeo: https://simbadigital.com.br/video/Avanti-Drone-com-Audio-480p.mp4")
+        elif mensagem == "consultor":
+            enviar_mensagem(numero, "Perfeito! Para agilizar seu atendimento, preciso de algumas informações.\nQual valor de entrada você pretende investir?")
+            sessao["etapa"] = "entrada"
 
     elif sessao["etapa"] == "entrada":
         sessao["entrada"] = mensagem.strip()
@@ -54,7 +76,7 @@ def webhook():
 
     elif sessao["etapa"] == "parcelas":
         sessao["parcelas"] = mensagem.strip()
-        enviar_mensagem(numero, "Perfeito! Agora me informe seu e-mail para contato:")
+        enviar_mensagem(numero, "Agora me informe seu e-mail para contato:")
         sessao["etapa"] = "email"
 
     elif sessao["etapa"] == "email":
@@ -69,7 +91,6 @@ def webhook():
             f"📞 WhatsApp: https://wa.me/{numero}\n"
             f"💰 Entrada: {sessao.get('entrada')}\n"
             f"📆 Parcelas: {sessao.get('parcelas')}\n"
-            f"🎯 Interesse: {sessao.get('interesse')}\n"
             f"✉️ E-mail: {sessao.get('email')}"
         )
         enviar_mensagem(CONSULTOR_NUMERO, msg_consultor)
