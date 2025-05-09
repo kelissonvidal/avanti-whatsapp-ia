@@ -49,10 +49,19 @@ def webhook():
             resposta = gerar_resposta(mensagem)
             print("✅ Resposta gerada pela IA:", resposta)
 
-            payload = {
-                "phone": numero,
-                "message": resposta
-            }
+            numero = str(numero).replace("+", "").strip()
+
+if numero.startswith("55") and len(numero) > 10:
+    payload = {
+        "phone": numero,
+        "message": resposta
+    }
+    r = requests.post(ZAPI_URL, json=payload)
+    print("📤 Resposta enviada. Status:", r.status_code)
+    print("📤 Retorno da ZAPI:", r.text)
+else:
+    print("⚠️ Número inválido ou mal formatado:", numero)
+
             r = requests.post(ZAPI_URL, json=payload)
             print("📤 Resposta enviada. Status:", r.status_code)
             print("📤 Retorno da ZAPI:", r.text)
