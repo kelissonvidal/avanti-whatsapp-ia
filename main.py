@@ -33,11 +33,19 @@ Resposta da IA:"""
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
+
+    # 🔒 Bloqueia loops causados pela própria IA
+    if data.get("type") != "ReceivedCallback" or data.get("fromMe"):
+        return jsonify({"status": "ignorado"})
+
     print("🔵 Dados recebidos do webhook:", data)
 
-    mensagem = data.get("text", {}).get("message") or                data.get("message", {}).get("text", {}).get("body") or                data.get("message", "")
+    mensagem = data.get("text", {}).get("message") or \
+               data.get("message", {}).get("text", {}).get("body") or \
+               data.get("message", "")
 
-    numero = data.get("phone") or              data.get("message", {}).get("from")
+    numero = data.get("phone") or \
+             data.get("message", {}).get("from")
 
     print(f"📨 Mensagem recebida: {mensagem}")
     print(f"📱 Número: {numero}")
