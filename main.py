@@ -8,10 +8,8 @@ SESSOES = {}
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 ZAPI_CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
-
 API_BASE = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}"
 HEADERS = {"Client-Token": ZAPI_CLIENT_TOKEN}
-
 CONSULTOR_NUMERO = "553734490005"
 
 def enviar_mensagem(telefone, mensagem):
@@ -25,67 +23,120 @@ def webhook():
         return jsonify({"status": "ignorado"})
 
     numero = data.get("phone") or data.get("message", {}).get("from")
-    mensagem = data.get("text", {}).get("message") or data.get("message", "")
+    mensagem = data.get("text", {}).get("message", "").strip().lower()
     if not numero or not mensagem:
         return jsonify({"status": "sem dados"})
 
     numero = str(numero).replace("+", "").strip()
     sessao = SESSOES.get(numero, {"etapa": "inicio"})
 
+    def avancar(etapa): sessao["etapa"] = etapa
+
     if sessao["etapa"] == "inicio":
         enviar_mensagem(numero, "Olá! Seja muito bem-vindo ao Avanti Parque Empresarial.\nQual o seu nome, por favor?")
-        sessao["etapa"] = "nome"
+        avancar("nome")
 
     elif sessao["etapa"] == "nome":
-        nome = mensagem.strip().split(" ")[0].capitalize()
-        if nome.isalpha():
-            sessao["nome"] = nome
-            enviar_mensagem(numero, f"Prazer em te conhecer, {nome}! 😊\nSobre o que você gostaria de saber?\n1️⃣ Tamanhos e preços\n2️⃣ Pagamento\n3️⃣ Localização\n4️⃣ Imagens e vídeos\n5️⃣ Falar com um consultor")
-            sessao["etapa"] = "opcao"
-        else:
-            enviar_mensagem(numero, "Desculpe, não entendi. Qual o seu nome, por favor?")
+        sessao["nome"] = mensagem.title()
+        enviar_mensagem(numero, f"Prazer em te conhecer, {sessao['nome']}!\nVocê está interessado em:\n1. Investir\n2. Construir sede própria")
+        avancar("interesse")
 
-    elif sessao["etapa"] == "opcao":
+    elif sessao["etapa"] == "interesse":
+        sessao["interesse"] = "Investir" if "1" in mensagem else "Construir sede própria"
+        enviar_mensagem(numero, "Você pretende pagar:\n1. À vista com desconto imperdível\n2. Parcelado em suaves parcelas")
+        avancar("forma_pagamento")
+
+    elif sessao["etapa"] == "forma_pagamento":
         if "1" in mensagem:
-            enviar_mensagem(numero, "Os lotes do Avanti começam a partir de 500 m². O valor exato depende da localização. Posso te enviar uma proposta personalizada — posso seguir com isso?")
-        elif "2" in mensagem:
-            enviar_mensagem(numero, "Temos financiamento direto com o empreendedor. Qual valor de entrada você pretende investir?")
-            sessao["etapa"] = "entrada"
-        elif "3" in mensagem:
-            enviar_mensagem(numero, "📍 O Avanti está às margens da rodovia em Lagoa da Prata: https://goo.gl/maps/FakeLink")
-        elif "4" in mensagem:
-            enviar_mensagem(numero, "Veja as imagens: https://simbadigital.com.br/imagem/imagem1.webp\n🎥 Vídeo: https://simbadigital.com.br/video/Avanti-Drone-com-Audio-480p.mp4")
-        elif "5" in mensagem:
-            enviar_mensagem(numero, "Perfeito! Para agilizar seu atendimento, preciso de algumas informações.\nQual valor de entrada você pretende investir?")
-            sessao["etapa"] = "entrada"
+            sessao["forma_pagamento"] = "À vista"
+            enviar_mensagem(numero, "O pagamento será:\n1. Em Dinheiro\n2. Imóvel + dinheiro\n3. Veículo + dinheiro\n4. Imóvel, Veículo + Dinheiro")
+            avancar("avista_tipo")
         else:
-            enviar_mensagem(numero, "Por favor, responda com um número de 1 a 5.")
+            sessao["forma_pagamento"] = "Parcelado"
+            enviar_mensagem(numero, "Qual o valor de entrada você pretende investir?\n1. R$ 10.000\n2. R$ 25.000\n3. R$ 50.000\n4. Pretendo comprar à vista\n5. Outro valor")
+            avancar("entrada_valor")
 
-    elif sessao["etapa"] == "entrada":
-        sessao["entrada"] = mensagem.strip()
-        enviar_mensagem(numero, "E em quantas parcelas você gostaria de dividir?")
-        sessao["etapa"] = "parcelas"
+    elif sessao["etapa"] == "avista_tipo":
+        opcoes = {
+            "1": "Dinheiro",
+            "2": "Imóvel + dinheiro",
+            "3": "Veículo + dinheiro",
+            "4": "Imóvel, veículo + dinheiro"
+        }
+        sessao["avista_detalhe"] = opcoes.get(mensagem[0], "Outro")
+        avancar("info_extra")
+        enviar_mensagem(numero, "Gostaria de saber mais alguma informação sobre os lotes?\n1. Localidade\n2. Metragem\n3. Infraestrutura já pronta\n4. Ir direto para o consultor")
+
+    elif sessao["etapa"] == "entrada_valor":
+        valores = {
+            "1": "R$ 10.000",
+            "2": "R$ 25.000",
+            "3": "R$ 50.000",
+            "4": "À vista",
+            "5": "Outro valor"
+        }
+        escolha = valores.get(mensagem[0], "Outro valor")
+        if escolha == "Outro valor":
+            avancar("entrada_custom")
+            enviar_mensagem(numero, "Digite o valor desejado para entrada:")
+        else:
+            sessao["entrada"] = escolha
+            avancar("parcelas")
+            enviar_mensagem(numero, "Em quantas parcelas pretende pagar?\n1. 60 parcelas\n2. 120 parcelas\n3. 240 parcelas\n4. Outro número")
+
+    elif sessao["etapa"] == "entrada_custom":
+        sessao["entrada"] = mensagem
+        avancar("parcelas")
+        enviar_mensagem(numero, "Em quantas parcelas pretende pagar?\n1. 60 parcelas\n2. 120 parcelas\n3. 240 parcelas\n4. Outro número")
 
     elif sessao["etapa"] == "parcelas":
-        sessao["parcelas"] = mensagem.strip()
-        enviar_mensagem(numero, "Agora me informe seu e-mail para contato:")
-        sessao["etapa"] = "email"
+        opcoes = {
+            "1": "60 parcelas",
+            "2": "120 parcelas",
+            "3": "240 parcelas",
+            "4": "Outro"
+        }
+        escolha = opcoes.get(mensagem[0], "Outro")
+        if escolha == "Outro":
+            avancar("parcelas_custom")
+            enviar_mensagem(numero, "Digite o número de parcelas que deseja:")
+        else:
+            sessao["parcelas"] = escolha
+            avancar("info_extra")
+            enviar_mensagem(numero, "Gostaria de saber mais alguma informação sobre os lotes?\n1. Localidade\n2. Metragem\n3. Infraestrutura já pronta\n4. Ir direto para o consultor")
 
-    elif sessao["etapa"] == "email":
-        sessao["email"] = mensagem.strip()
-        enviar_mensagem(numero, "Tudo certo! Agora vou te encaminhar para o consultor responsável que vai finalizar sua proposta. 👇")
+    elif sessao["etapa"] == "parcelas_custom":
+        sessao["parcelas"] = mensagem
+        avancar("info_extra")
+        enviar_mensagem(numero, "Gostaria de saber mais alguma informação sobre os lotes?\n1. Localidade\n2. Metragem\n3. Infraestrutura já pronta\n4. Ir direto para o consultor")
+
+    elif sessao["etapa"] == "info_extra":
+        if "1" in mensagem:
+            enviar_mensagem(numero, "📍 Localidade: Lotes com acesso direto à rodovia em Lagoa da Prata.")
+        elif "2" in mensagem:
+            enviar_mensagem(numero, "📐 Metragem: Lotes a partir de 500 m².")
+        elif "3" in mensagem:
+            enviar_mensagem(numero, "🛠️ Infraestrutura: asfalto, água, esgoto e iluminação já instalados.")
+        elif "4" in mensagem:
+            avancar("finalizar")
+
+        if sessao["etapa"] != "finalizar":
+            avancar("info_extra")
+
+    if sessao["etapa"] == "finalizar":
+        enviar_mensagem(numero, "Já anotei todas as suas informações. Agora vou te encaminhar para nosso consultor. 👇")
         enviar_mensagem(numero, "https://wa.me/553734490005")
-        sessao["etapa"] = "finalizado"
-
-        msg_consultor = (
-            f"🚀 Novo lead qualificado do Avanti\n"
+        msg = (
+            f"🚀 Lead qualificado do Avanti\n"
             f"📛 Nome: {sessao.get('nome')}\n"
-            f"📞 WhatsApp: https://wa.me/{numero}\n"
-            f"💰 Entrada: {sessao.get('entrada')}\n"
-            f"📆 Parcelas: {sessao.get('parcelas')}\n"
-            f"✉️ E-mail: {sessao.get('email')}"
+            f"🎯 Interesse: {sessao.get('interesse')}\n"
+            f"💳 Pagamento: {sessao.get('forma_pagamento')}\n"
+            f"💰 Entrada: {sessao.get('entrada', sessao.get('avista_detalhe', 'Não informado'))}\n"
+            f"📆 Parcelas: {sessao.get('parcelas', 'Não informado')}\n"
+            f"📞 WhatsApp: https://wa.me/{numero}"
         )
-        enviar_mensagem(CONSULTOR_NUMERO, msg_consultor)
+        enviar_mensagem(CONSULTOR_NUMERO, msg)
+        sessao["etapa"] = "encerrado"
 
     SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
