@@ -67,7 +67,29 @@ Você está interessado em:
         avancar("interesse")
         return jsonify({"status": "coletou_nome"})
 
-    # Fallback final
+    elif sessao["etapa"] == "interesse":
+        if mensagem == "1":
+            sessao["interesse"] = "Investir"
+        elif mensagem == "2":
+            sessao["interesse"] = "Construir sede própria"
+        else:
+            enviar_mensagem(numero, "Por favor, responda com 1 ou 2.")
+            return jsonify({"status": "aguardando_interesse"})
+
+        enviar_mensagem(numero,
+            "Você pretende pagar:
+
+"
+            "1. À vista com desconto imperdível
+"
+            "2. Parcelado em suaves parcelas
+
+"
+            "(Digite apenas o número da opção desejada)"
+        )
+        avancar("forma_pagamento")
+        return jsonify({"status": "coletou_interesse"})
+
     SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
 
