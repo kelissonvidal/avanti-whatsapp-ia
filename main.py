@@ -18,28 +18,20 @@ def enviar_mensagem(telefone, mensagem):
 
 def webhook_finalizar(numero, sessao):
     nome = sessao.get("nome", "cliente")
-    enviar_mensagem(numero,
-        f"Perfeito {nome}!
+    mensagem_final = f"""Perfeito {nome}!
 
-"
-        "Como já adiantamos suas informações e suas dúvidas, agora vou te encaminhar para nosso consultor. Ele já vai falar com você.
+Como já adiantamos suas informações e suas dúvidas, agora vou te encaminhar para nosso consultor. Ele já vai falar com você.
 
-"
-        "Parabéns pelo interesse em nosso Parque Empresarial. 🎯"
-    )
+Parabéns pelo interesse em nosso Parque Empresarial. 🎯"""
+    enviar_mensagem(numero, mensagem_final)
+
     msg = (
-        f"🚀 Lead qualificado do Avanti
-"
-        f"📛 Nome: {sessao.get('nome')}
-"
-        f"🎯 Interesse: {sessao.get('interesse')}
-"
-        f"💳 Pagamento: {sessao.get('forma_pagamento')}
-"
-        f"💰 Entrada: {sessao.get('entrada', sessao.get('avista_detalhe', 'Não informado'))}
-"
-        f"📆 Parcelas: {sessao.get('parcelas', 'Não informado')}
-"
+        f"🚀 Lead qualificado do Avanti\n"
+        f"📛 Nome: {sessao.get('nome')}\n"
+        f"🎯 Interesse: {sessao.get('interesse', 'Não informado')}\n"
+        f"💳 Pagamento: {sessao.get('forma_pagamento', 'Não informado')}\n"
+        f"💰 Entrada: {sessao.get('entrada', sessao.get('avista_detalhe', 'Não informado'))}\n"
+        f"📆 Parcelas: {sessao.get('parcelas', 'Não informado')}\n"
         f"📞 WhatsApp: https://wa.me/{numero}"
     )
     enviar_mensagem(CONSULTOR_NUMERO, msg)
@@ -58,36 +50,28 @@ def webhook():
     numero = str(numero).replace("+", "").strip()
     sessao = SESSOES.get(numero, {"etapa": "inicio"})
 
-    def avancar(etapa): sessao["etapa"] = etapa
+    def avancar(etapa):
+        sessao["etapa"] = etapa
+        SESSOES[numero] = sessao
 
     if sessao["etapa"] == "inicio":
-        enviar_mensagem(numero, "Olá! Seja muito bem-vindo ao Avanti Parque Empresarial.
-
-Qual o seu nome, por favor?")
+        enviar_mensagem(numero, "Olá! Seja muito bem-vindo ao Avanti Parque Empresarial.\n\nQual o seu nome, por favor?")
         avancar("nome")
+        return jsonify({"status": "aguardando_nome"})
 
     elif sessao["etapa"] == "nome":
         sessao["nome"] = mensagem.title()
         enviar_mensagem(numero,
-            f"Prazer em te conhecer, {sessao['nome']}! 😊
-
-"
-            "Todos os nossos consultores estão em atendimento nesse momento, vou tirando suas dúvidas aqui enquanto eles terminam.
-
-"
-            "Você está interessado em:
-
-"
-            "1. Investir
-"
-            "2. Construir sede própria
-
-"
+            f"Prazer em te conhecer, {sessao['nome']}! 😊\n\n"
+            "Todos os nossos consultores estão em atendimento nesse momento, vou tirando suas dúvidas aqui enquanto eles terminam.\n\n"
+            "Você está interessado em:\n\n"
+            "1. Investir\n"
+            "2. Construir sede própria\n\n"
             "(Digite apenas o número da opção desejada)"
         )
         avancar("interesse")
+        return jsonify({"status": "coletou_nome"})
 
-    # Se travou no teste anterior, pode ter sido erro no webhook. Vamos apenas fechar para garantir:
     SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
 
