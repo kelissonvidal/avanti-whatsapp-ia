@@ -18,17 +18,20 @@ def enviar_mensagem(telefone, mensagem):
 
 def reapresentar_opcoes(numero, sessao):
     restantes = sessao.get("info_pendentes", [])
-    if not restantes:
+    frases = [
+        "Legal! Quer saber mais algum ponto?",
+        "Tem mais alguma dessas que você gostaria de ver?",
+        "Me avisa se quiser ver mais algum detalhe antes de continuar:"
+    ]
+    if not restantes or all(o.startswith("4") for o in restantes):
         sessao["etapa"] = "finalizar"
         return webhook_finalizar(numero, sessao)
-    texto = "Gostaria de saber mais alguma informação sobre os lotes?\n"
-    for item in restantes:
-        texto += item
-    texto += "\n(Digite apenas o número da opção desejada)"
+    frase = frases[len(frases) - len(restantes)] if len(restantes) <= len(frases) else frases[-1]
+    texto = frase + "\n" + "\n".join(restantes) + "\n(Digite apenas o número da opção desejada)"
     enviar_mensagem(numero, texto)
 
 def webhook_finalizar(numero, sessao):
-    enviar_mensagem(numero, "Já anotei todas as suas informações. Agora vou te encaminhar para nosso consultor. 👇")
+    enviar_mensagem(numero, "Perfeito, você já conferiu todas as informações importantes. Agora vou te encaminhar para nosso consultor. 👇")
     enviar_mensagem(numero, "https://wa.me/553734490005")
     msg = (
         f"🚀 Lead qualificado do Avanti\n"
@@ -98,7 +101,12 @@ def webhook():
             enviar_mensagem(numero, "Por favor, responda com o número da opção desejada.")
             return jsonify({"status": "aguardando_numero"})
         sessao["avista_detalhe"] = opcoes.get(mensagem[0], "Outro")
-        sessao["info_pendentes"] = ["1. Localidade", "2. Metragem", "3. Infraestrutura já pronta", "4. Ir direto para o consultor"]
+        sessao["info_pendentes"] = [
+            "1. Localidade",
+            "2. Metragem",
+            "3. Infraestrutura já pronta",
+            "4. Ir direto para o consultor"
+        ]
         avancar("info_extra")
         reapresentar_opcoes(numero, sessao)
 
@@ -137,24 +145,36 @@ def webhook():
             enviar_mensagem(numero, "Digite o número de parcelas que deseja:")
         else:
             sessao["parcelas"] = escolha
-            sessao["info_pendentes"] = ["1. Localidade", "2. Metragem", "3. Infraestrutura já pronta", "4. Ir direto para o consultor"]
+            sessao["info_pendentes"] = [
+                "1. Localidade",
+                "2. Metragem",
+                "3. Infraestrutura já pronta",
+                "4. Ir direto para o consultor"
+            ]
             avancar("info_extra")
             reapresentar_opcoes(numero, sessao)
 
     elif sessao["etapa"] == "parcelas_custom":
         sessao["parcelas"] = mensagem
-        sessao["info_pendentes"] = ["1. Localidade", "2. Metragem", "3. Infraestrutura já pronta", "4. Ir direto para o consultor"]
+        sessao["info_pendentes"] = [
+            "1. Localidade",
+            "2. Metragem",
+            "3. Infraestrutura já pronta",
+            "4. Ir direto para o consultor"
+        ]
         avancar("info_extra")
         reapresentar_opcoes(numero, sessao)
 
     elif sessao["etapa"] == "info_extra":
         m = mensagem[0]
-        if m == "1":
-            enviar_mensagem(numero, "📍 Localidade: Lotes com acesso direto à rodovia em Lagoa da Prata.")
-        elif m == "2":
-            enviar_mensagem(numero, "📐 Metragem: Lotes a partir de 500 m².")
-        elif m == "3":
-            enviar_mensagem(numero, "🛠️ Infraestrutura: asfalto, água, esgoto e iluminação já instalados.")
+        respostas = {
+            "1": "📍 Localidade: Lotes com acesso direto à rodovia em Lagoa da Prata.",
+            "2": "📐 Metragem: Lotes a partir de 500 m².",
+            "3": "🛠️ Infraestrutura: asfalto, água, esgoto e iluminação já instalados.",
+            "4": None
+        }
+        if m in respostas and m != "4":
+            enviar_mensagem(numero, respostas[m])
         elif m == "4":
             avancar("finalizar")
             return webhook_finalizar(numero, sessao)
