@@ -4,65 +4,75 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Sessões por telefone
 SESSOES = {}
 
-# Z-API
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 ZAPI_CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
+
 API_BASE = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}"
 HEADERS = {"Client-Token": ZAPI_CLIENT_TOKEN}
 
-# Envia mensagem via Z-API
+CONSULTOR_NUMERO = "553734490005"
+
 def enviar_mensagem(telefone, mensagem):
-    payload = {
-        "phone": telefone,
-        "message": mensagem
-    }
+    payload = {"phone": telefone, "message": mensagem}
     requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-
-    # Bloqueia loops
     if data.get("type") != "ReceivedCallback" or data.get("fromMe"):
         return jsonify({"status": "ignorado"})
 
     numero = data.get("phone") or data.get("message", {}).get("from")
     mensagem = data.get("text", {}).get("message", "") or data.get("message", {}).get("text", {}).get("body", "")
-
     if not numero or not mensagem:
         return jsonify({"status": "sem dados"})
 
     numero = str(numero).replace("+", "").strip()
-    sessao = SESSOES.get(numero, {"etapa": "inicio", "nome": None})
-    
+    sessao = SESSOES.get(numero, {"etapa": "inicio"})
+
     if sessao["etapa"] == "inicio":
         enviar_mensagem(numero, "Olá! Seja muito bem-vindo ao Avanti Parque Empresarial.\nQual o seu nome, por favor?")
-        sessao["etapa"] = "aguardando_nome"
+        sessao["etapa"] = "nome"
 
-    elif sessao["etapa"] == "aguardando_nome":
-        nome = mensagem.strip().split(" ")[0].capitalize()
-        sessao["nome"] = nome
-        enviar_mensagem(numero, f"Prazer em te conhecer, {nome}! 😊\nMe conta rapidinho, o que você gostaria de saber?\n\n📐 Tamanhos e preços dos lotes\n💰 Formas de pagamento\n📍 Localização\n📸 Imagens e vídeos\n👤 Falar com um consultor")
-        sessao["etapa"] = "aguardando_escolha"
+    elif sessao["etapa"] == "nome":
+        sessao["nome"] = mensagem.strip().split(" ")[0].capitalize()
+        enviar_mensagem(numero, f"Prazer em te conhecer, {sessao['nome']}! 😊\nVocê está interessado em investir ou construir sede própria?")
+        sessao["etapa"] = "interesse"
 
-    elif sessao["etapa"] == "aguardando_escolha":
-        texto = mensagem.lower()
-        if "preço" in texto or "tamanho" in texto or "lote" in texto:
-            enviar_mensagem(numero, "Os lotes do Avanti começam a partir de 500 m² e temos diversas opções com ótima metragem.\nO valor exato depende da localização dentro do parque. Posso te enviar uma proposta personalizada — posso seguir com isso?")
-        elif "pagamento" in texto or "parcel" in texto or "entrada" in texto:
-            enviar_mensagem(numero, "Temos financiamento próprio direto com o empreendedor, com entrada facilitada e parcelamento em até 120 vezes.\nVocê gostaria de simular uma proposta? Me diga o valor de entrada e o número de parcelas que tem em mente.")
-        elif "localiza" in texto or "onde" in texto:
-            enviar_mensagem(numero, "O Avanti está localizado às margens da rodovia em Lagoa da Prata, com acesso rápido ao centro e a vias estratégicas.\n📍 Veja a localização no mapa: https://goo.gl/maps/FakeLink")
-        elif "imagem" in texto or "vídeo" in texto or "foto" in texto:
-            enviar_mensagem(numero, "Confira as imagens do empreendimento:\nhttps://simbadigital.com.br/imagem/imagem1.webp\n🎥 Vídeo aéreo:\nhttps://simbadigital.com.br/video/Avanti-Drone-com-Audio-480p.mp4")
-        elif "consultor" in texto or "humano" in texto:
-            enviar_mensagem(numero, "Claro! Já vou te encaminhar para um dos nossos especialistas. Aguarde um instante, ele vai te chamar aqui mesmo. ✅")
-        else:
-            enviar_mensagem(numero, "Essa é uma ótima pergunta! Já estou registrando e logo um dos nossos consultores vai te responder com mais detalhes.\nEnquanto isso, posso te mostrar as informações principais sobre os lotes, localização e formas de pagamento.")
+    elif sessao["etapa"] == "interesse":
+        sessao["interesse"] = mensagem.strip()
+        enviar_mensagem(numero, "Qual o valor de entrada que você está pensando em investir?")
+        sessao["etapa"] = "entrada"
+
+    elif sessao["etapa"] == "entrada":
+        sessao["entrada"] = mensagem.strip()
+        enviar_mensagem(numero, "E em quantas parcelas você gostaria de dividir?")
+        sessao["etapa"] = "parcelas"
+
+    elif sessao["etapa"] == "parcelas":
+        sessao["parcelas"] = mensagem.strip()
+        enviar_mensagem(numero, "Perfeito! Agora me informe seu e-mail para contato:")
+        sessao["etapa"] = "email"
+
+    elif sessao["etapa"] == "email":
+        sessao["email"] = mensagem.strip()
+        enviar_mensagem(numero, "Tudo certo! Agora vou te encaminhar para o consultor responsável que vai finalizar sua proposta. 👇")
+        enviar_mensagem(numero, "https://wa.me/553734490005")
+        sessao["etapa"] = "finalizado"
+
+        msg_consultor = (
+            f"🚀 Novo lead qualificado do Avanti\n"
+            f"📛 Nome: {sessao.get('nome')}\n"
+            f"📞 WhatsApp: https://wa.me/{numero}\n"
+            f"💰 Entrada: {sessao.get('entrada')}\n"
+            f"📆 Parcelas: {sessao.get('parcelas')}\n"
+            f"🎯 Interesse: {sessao.get('interesse')}\n"
+            f"✉️ E-mail: {sessao.get('email')}"
+        )
+        enviar_mensagem(CONSULTOR_NUMERO, msg_consultor)
 
     SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
