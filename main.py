@@ -13,44 +13,32 @@ HEADERS = {"Client-Token": ZAPI_CLIENT_TOKEN}
 CONSULTOR_NUMERO = "553734490005"
 
 def enviar_mensagem(telefone, mensagem):
+    print(f"📤 Enviando para {telefone}:\n{mensagem}")
     payload = {"phone": telefone, "message": mensagem}
     requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
-
-def webhook_finalizar(numero, sessao):
-    nome = sessao.get("nome", "cliente")
-    mensagem_final = f"""Perfeito {nome}!
-
-Como já adiantamos suas informações e suas dúvidas, agora vou te encaminhar para nosso consultor. Ele já vai falar com você.
-
-Parabéns pelo interesse em nosso Parque Empresarial. 🎯"""
-    enviar_mensagem(numero, mensagem_final)
-
-    msg = (
-        f"🚀 Lead qualificado do Avanti\n"
-        f"📛 Nome: {sessao.get('nome')}\n"
-        f"🎯 Interesse: {sessao.get('interesse', 'Não informado')}\n"
-        f"💳 Pagamento: {sessao.get('forma_pagamento', 'Não informado')}\n"
-        f"💰 Entrada: {sessao.get('entrada', sessao.get('avista_detalhe', 'Não informado'))}\n"
-        f"📆 Parcelas: {sessao.get('parcelas', 'Não informado')}\n"
-        f"📞 WhatsApp: https://wa.me/{numero}"
-    )
-    enviar_mensagem(CONSULTOR_NUMERO, msg)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
+    print("📥 Webhook recebido:", data)
+
     if data.get("type") != "ReceivedCallback" or data.get("fromMe"):
         return jsonify({"status": "ignorado"})
 
-    numero = data.get("phone") or data.get("message", {}).get("from")
-    mensagem = data.get("text", {}).get("message", "").strip().lower()
+    numero = data.get("phone") or data.get("message", {}).get("from", "")
+    mensagem = data.get("text", {}).get("message") or                data.get("message", {}).get("text", {}).get("body") or ""
+
     if not numero or not mensagem:
+        print("⚠️ Dados incompletos - número ou mensagem ausente.")
         return jsonify({"status": "sem dados"})
 
     numero = str(numero).replace("+", "").strip()
+    mensagem = mensagem.strip().lower()
+
     sessao = SESSOES.get(numero, {"etapa": "inicio"})
 
     def avancar(etapa):
+        print(f"🔄 Avançando {numero} para etapa: {etapa}")
         sessao["etapa"] = etapa
         SESSOES[numero] = sessao
 
@@ -60,18 +48,26 @@ def webhook():
         return jsonify({"status": "aguardando_nome"})
 
     elif sessao["etapa"] == "nome":
-        sessao["nome"] = mensagem.title()
-        enviar_mensagem(numero,
-            f"Prazer em te conhecer, {sessao['nome']}! 😊\n\n"
-            "Todos os nossos consultores estão em atendimento nesse momento, vou tirando suas dúvidas aqui enquanto eles terminam.\n\n"
-            "Você está interessado em:\n\n"
-            "1. Investir\n"
-            "2. Construir sede própria\n\n"
-            "(Digite apenas o número da opção desejada)"
-        )
+        if not mensagem:
+            enviar_mensagem(numero, "Desculpe, não entendi seu nome. Pode repetir?")
+            return jsonify({"status": "erro_nome"})
+        nome = mensagem.split(" ")[0].capitalize()
+        sessao["nome"] = nome
+        texto = f"""Prazer em te conhecer, {nome}! 😊
+
+Todos os nossos consultores estão em atendimento nesse momento, vou tirando suas dúvidas aqui enquanto eles terminam.
+
+Você está interessado em:
+
+1. Investir
+2. Construir sede própria
+
+(Digite apenas o número da opção desejada)"""
+        enviar_mensagem(numero, texto)
         avancar("interesse")
         return jsonify({"status": "coletou_nome"})
 
+    # Fallback final
     SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
 
