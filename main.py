@@ -32,17 +32,35 @@ Resposta da IA:"""
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-    mensagem = data.get("text", {}).get("message", "") or data.get("message", "")
-    numero = data.get("phone", "") or data.get("message", {}).get("from", "")
-    
+    print("🔵 Dados recebidos do webhook:", data)
+
+    mensagem = data.get("text", {}).get("message") or \
+               data.get("message", {}).get("text", {}).get("body") or \
+               data.get("message", "")
+
+    numero = data.get("phone") or \
+             data.get("message", {}).get("from")
+
+    print(f"📨 Mensagem recebida: {mensagem}")
+    print(f"📱 Número: {numero}")
+
     if mensagem and numero:
-        resposta = gerar_resposta(mensagem)
-        payload = {
-            "phone": numero,
-            "message": resposta
-        }
-        requests.post(ZAPI_URL, json=payload)
+        try:
+            resposta = gerar_resposta(mensagem)
+            print("✅ Resposta gerada pela IA:", resposta)
+
+            payload = {
+                "phone": numero,
+                "message": resposta
+            }
+            r = requests.post(ZAPI_URL, json=payload)
+            print("📤 Resposta enviada. Status:", r.status_code)
+            print("📤 Retorno da ZAPI:", r.text)
+        except Exception as e:
+            print("❌ Erro ao gerar ou enviar resposta:", str(e))
+
     return jsonify({"status": "ok"})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
