@@ -37,6 +37,20 @@ Parabéns pelo interesse em nosso Parque Empresarial. 🎯"""
     )
     enviar_mensagem(CONSULTOR_NUMERO, msg)
 
+def reapresentar_opcoes(numero, sessao):
+    restantes = sessao.get("info_pendentes", [])
+    frases = [
+        "Legal! Quer saber mais algum ponto?",
+        "Tem mais alguma dessas que você gostaria de ver?",
+        "Aproveita e me diga se deseja mais detalhes antes de continuar:"
+    ]
+    if not restantes or all(o.startswith("4") for o in restantes):
+        finalizar_fluxo(numero, sessao)
+        return
+    frase = frases[min(len(sessao.get('info_respondidas', [])), len(frases) - 1)]
+    texto = f"{frase}\n\n" + "\n".join(restantes) + "\n\n(Digite apenas o número da opção desejada)"
+    enviar_mensagem(numero, texto)
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -49,7 +63,6 @@ def webhook():
     mensagem = data.get("text", {}).get("message") or data.get("message", {}).get("text", {}).get("body") or ""
 
     if not numero or not mensagem:
-        print("⚠️ Dados incompletos - número ou mensagem ausente.")
         return jsonify({"status": "sem dados"})
 
     numero = str(numero).replace("+", "").strip()
@@ -58,7 +71,6 @@ def webhook():
     sessao = SESSOES.get(numero, {"etapa": "inicio"})
 
     def avancar(etapa):
-        print(f"🔄 Avançando {numero} para etapa: {etapa}")
         sessao["etapa"] = etapa
         SESSOES[numero] = sessao
 
@@ -68,9 +80,6 @@ def webhook():
         return jsonify({"status": "aguardando_nome"})
 
     elif sessao["etapa"] == "nome":
-        if not mensagem:
-            enviar_mensagem(numero, "Desculpe, não entendi seu nome. Pode repetir?")
-            return jsonify({"status": "erro_nome"})
         nome = mensagem.split(" ")[0].capitalize()
         sessao["nome"] = nome
         texto = f"""Prazer em te conhecer, {nome}! 😊
@@ -144,8 +153,15 @@ Você está interessado em:
             "4": "Imóvel, Veículo + dinheiro"
         }
         sessao["avista_detalhe"] = opcoes.get(mensagem[0], "Outro")
-        finalizar_fluxo(numero, sessao)
-        return jsonify({"status": "finalizou_avista"})
+        sessao["info_pendentes"] = [
+            "1. Localidade",
+            "2. Metragem",
+            "3. Infraestrutura já pronta",
+            "4. Ir direto para o consultor"
+        ]
+        sessao["info_respondidas"] = []
+        avancar("info_extra")
+        reapresentar_opcoes(numero, sessao)
 
     elif sessao["etapa"] == "entrada_valor":
         valores = {
@@ -198,11 +214,45 @@ Você está interessado em:
             avancar("parcelas_custom")
         else:
             sessao["parcelas"] = escolha
-            finalizar_fluxo(numero, sessao)
+            sessao["info_pendentes"] = [
+                "1. Localidade",
+                "2. Metragem",
+                "3. Infraestrutura já pronta",
+                "4. Ir direto para o consultor"
+            ]
+            sessao["info_respondidas"] = []
+            avancar("info_extra")
+            reapresentar_opcoes(numero, sessao)
 
     elif sessao["etapa"] == "parcelas_custom":
         sessao["parcelas"] = mensagem
-        finalizar_fluxo(numero, sessao)
+        sessao["info_pendentes"] = [
+            "1. Localidade",
+            "2. Metragem",
+            "3. Infraestrutura já pronta",
+            "4. Ir direto para o consultor"
+        ]
+        sessao["info_respondidas"] = []
+        avancar("info_extra")
+        reapresentar_opcoes(numero, sessao)
+
+    elif sessao["etapa"] == "info_extra":
+        resp = mensagem[0]
+        respostas = {
+            "1": "📍 Localidade: Lotes com acesso direto à rodovia em Lagoa da Prata.",
+            "2": "📐 Metragem: Lotes a partir de 500 m².",
+            "3": "🛠️ Infraestrutura: asfalto, água, esgoto e iluminação já instalados.",
+            "4": None
+        }
+        if resp in respostas and resp != "4":
+            enviar_mensagem(numero, respostas[resp])
+            sessao["info_respondidas"].append(resp)
+        elif resp == "4":
+            finalizar_fluxo(numero, sessao)
+            return jsonify({"status": "finalizou"})
+
+        sessao["info_pendentes"] = [op for op in sessao["info_pendentes"] if not op.startswith(resp)]
+        reapresentar_opcoes(numero, sessao)
 
     SESSOES[numero] = sessao
     return jsonify({"status": f"etapa_{sessao['etapa']}"})
