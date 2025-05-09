@@ -26,7 +26,7 @@ def webhook():
         return jsonify({"status": "ignorado"})
 
     numero = data.get("phone") or data.get("message", {}).get("from", "")
-    mensagem = data.get("text", {}).get("message") or                data.get("message", {}).get("text", {}).get("body") or ""
+    mensagem = data.get("text", {}).get("message") or data.get("message", {}).get("text", {}).get("body") or ""
 
     if not numero or not mensagem:
         print("⚠️ Dados incompletos - número ou mensagem ausente.")
@@ -76,17 +76,13 @@ Você está interessado em:
             enviar_mensagem(numero, "Por favor, responda com 1 ou 2.")
             return jsonify({"status": "aguardando_interesse"})
 
-        enviar_mensagem(numero,
-            "Você pretende pagar:
+        texto = """Você pretende pagar:
 
-"
-            "1. À vista com desconto imperdível
-"
-            "2. Parcelado em suaves parcelas
+1. À vista com desconto imperdível
+2. Parcelado em suaves parcelas
 
-"
-            "(Digite apenas o número da opção desejada)"
-        )
+(Digite apenas o número da opção desejada)"""
+        enviar_mensagem(numero, texto)
         avancar("forma_pagamento")
         return jsonify({"status": "coletou_interesse"})
 
