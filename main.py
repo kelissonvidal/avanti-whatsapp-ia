@@ -1,76 +1,85 @@
 import os
 import requests
 from flask import Flask, request, jsonify
-from openai import OpenAI
 
 app = Flask(__name__)
 
-# Inicializa OpenAI com chave de API do ambiente
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Sessões por telefone
+SESSOES = {}
 
-# Z-API: ID da instância, token e client-token
+# Z-API
 ZAPI_INSTANCE_ID = os.getenv("ZAPI_INSTANCE_ID")
 ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 ZAPI_CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
-
 API_BASE = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}"
 HEADERS = {"Client-Token": ZAPI_CLIENT_TOKEN}
 
-# Função para gerar resposta com OpenAI
-def gerar_resposta(mensagem):
-    prompt = f"""Você é um assistente comercial humanizado do Avanti Parque Empresarial. Sempre cumprimente o cliente pelo nome, se souber. O foco é informar sobre os lotes, formas de pagamento, localização e imagens. Seja gentil e direto. Evite termos técnicos ou respostas genéricas.
-
-Mensagem do cliente: {mensagem}
-
-Resposta da IA:"""
-    resposta = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{ "role": "user", "content": prompt }],
-        temperature=0.7
-    )
-    return resposta.choices[0].message.content.strip()
+# Envia mensagem via Z-API
+def enviar_mensagem(telefone, mensagem):
+    payload = {
+        "phone": telefone,
+        "message": mensagem
+    }
+    requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
 
-    # 🔒 Bloqueia loops causados pela própria IA
+    # Bloqueia loops
     if data.get("type") != "ReceivedCallback" or data.get("fromMe"):
         return jsonify({"status": "ignorado"})
 
-    print("🔵 Dados recebidos do webhook:", data)
+    numero = data.get("phone") or data.get("message", {}).get("from")
+    mensagem = data.get("text", {}).get("message", "") or data.get("message", {}).get("text", {}).get("body", "")
 
-    mensagem = data.get("text", {}).get("message") or \
-               data.get("message", {}).get("text", {}).get("body") or \
-               data.get("message", "")
+    if not numero or not mensagem:
+        return jsonify({"status": "sem dados"})
 
-    numero = data.get("phone") or \
-             data.get("message", {}).get("from")
+    numero = str(numero).replace("+", "").strip()
+    sessao = SESSOES.get(numero, {"etapa": "inicio", "nome": None})
+    
+    if sessao["etapa"] == "inicio":
+        enviar_mensagem(numero, "Olá! Seja muito bem-vindo ao Avanti Parque Empresarial.
+Qual o seu nome, por favor?")
+        sessao["etapa"] = "aguardando_nome"
 
-    print(f"📨 Mensagem recebida: {mensagem}")
-    print(f"📱 Número: {numero}")
+    elif sessao["etapa"] == "aguardando_nome":
+        nome = mensagem.strip().split(" ")[0].capitalize()
+        sessao["nome"] = nome
+        enviar_mensagem(numero, f"Prazer em te conhecer, {nome}! 😊
+Me conta rapidinho, o que você gostaria de saber?
 
-    if mensagem and numero:
-        try:
-            resposta = gerar_resposta(mensagem)
-            print("✅ Resposta gerada pela IA:", resposta)
+📐 Tamanhos e preços dos lotes
+💰 Formas de pagamento
+📍 Localização
+📸 Imagens e vídeos
+👤 Falar com um consultor")
+        sessao["etapa"] = "aguardando_escolha"
 
-            numero = str(numero).replace("+", "").strip()
+    elif sessao["etapa"] == "aguardando_escolha":
+        texto = mensagem.lower()
+        if "preço" in texto or "tamanho" in texto or "lote" in texto:
+            enviar_mensagem(numero, "Os lotes do Avanti começam a partir de 500 m² e temos diversas opções com ótima metragem.
+O valor exato depende da localização dentro do parque. Posso te enviar uma proposta personalizada — posso seguir com isso?")
+        elif "pagamento" in texto or "parcel" in texto or "entrada" in texto:
+            enviar_mensagem(numero, "Temos financiamento próprio direto com o empreendedor, com entrada facilitada e parcelamento em até 120 vezes.
+Você gostaria de simular uma proposta? Me diga o valor de entrada e o número de parcelas que tem em mente.")
+        elif "localiza" in texto or "onde" in texto:
+            enviar_mensagem(numero, "O Avanti está localizado às margens da rodovia em Lagoa da Prata, com acesso rápido ao centro e a vias estratégicas.
+📍 Veja a localização no mapa: https://goo.gl/maps/FakeLink")
+        elif "imagem" in texto or "vídeo" in texto or "foto" in texto:
+            enviar_mensagem(numero, "Confira as imagens do empreendimento:
+https://simbadigital.com.br/imagem/imagem1.webp
+🎥 Vídeo aéreo:
+https://simbadigital.com.br/video/Avanti-Drone-com-Audio-480p.mp4")
+        elif "consultor" in texto or "humano" in texto:
+            enviar_mensagem(numero, "Claro! Já vou te encaminhar para um dos nossos especialistas. Aguarde um instante, ele vai te chamar aqui mesmo. ✅")
+        else:
+            enviar_mensagem(numero, "Essa é uma ótima pergunta! Já estou registrando e logo um dos nossos consultores vai te responder com mais detalhes.
+Enquanto isso, posso te mostrar as informações principais sobre os lotes, localização e formas de pagamento.")
 
-            if numero.startswith("55") and len(numero) > 10:
-                payload = {
-                    "phone": numero,
-                    "message": resposta
-                }
-                r = requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
-                print("📤 Resposta enviada. Status:", r.status_code)
-                print("📤 Retorno da ZAPI:", r.text)
-            else:
-                print("⚠️ Número inválido ou mal formatado:", numero)
-
-        except Exception as e:
-            print("❌ Erro ao gerar ou enviar resposta:", str(e))
-
+    SESSOES[numero] = sessao
     return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
