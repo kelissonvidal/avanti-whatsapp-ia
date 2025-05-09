@@ -32,8 +32,8 @@ Resposta da IA:"""
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
-    mensagem = data.get("text", {}).get("message", "")
-    numero = data.get("phone", "")
+    mensagem = data.get("text", {}).get("message", "") or data.get("message", "")
+    numero = data.get("phone", "") or data.get("message", {}).get("from", "")
     
     if mensagem and numero:
         resposta = gerar_resposta(mensagem)
