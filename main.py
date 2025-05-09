@@ -10,7 +10,7 @@ ZAPI_TOKEN = os.getenv("ZAPI_TOKEN")
 ZAPI_CLIENT_TOKEN = os.getenv("ZAPI_CLIENT_TOKEN")
 API_BASE = f"https://api.z-api.io/instances/{ZAPI_INSTANCE_ID}/token/{ZAPI_TOKEN}"
 HEADERS = {"Client-Token": ZAPI_CLIENT_TOKEN}
-CONSULTOR_NUMERO = "553734490005"
+CONSULTOR_NUMERO = "5537984065476"
 
 def enviar_mensagem(telefone, mensagem):
     print(f"📤 Enviando para {telefone}:\n{mensagem}")
