@@ -45,28 +45,25 @@ def webhook():
     print(f"📱 Número: {numero}")
 
     if mensagem and numero:
-        try:
-            resposta = gerar_resposta(mensagem)
-            print("✅ Resposta gerada pela IA:", resposta)
+    try:
+        resposta = gerar_resposta(mensagem)
+        print("✅ Resposta gerada pela IA:", resposta)
 
-            numero = str(numero).replace("+", "").strip()
+        numero = str(numero).replace("+", "").strip()
 
-if numero.startswith("55") and len(numero) > 10:
-    payload = {
-        "phone": numero,
-        "message": resposta
-    }
-    r = requests.post(ZAPI_URL, json=payload)
-    print("📤 Resposta enviada. Status:", r.status_code)
-    print("📤 Retorno da ZAPI:", r.text)
-else:
-    print("⚠️ Número inválido ou mal formatado:", numero)
-
+        if numero.startswith("55") and len(numero) > 10:
+            payload = {
+                "phone": numero,
+                "message": resposta
+            }
             r = requests.post(ZAPI_URL, json=payload)
             print("📤 Resposta enviada. Status:", r.status_code)
             print("📤 Retorno da ZAPI:", r.text)
-        except Exception as e:
-            print("❌ Erro ao gerar ou enviar resposta:", str(e))
+        else:
+            print("⚠️ Número inválido ou mal formatado:", numero)
+
+    except Exception as e:
+        print("❌ Erro ao gerar ou enviar resposta:", str(e))
 
     return jsonify({"status": "ok"})
 
