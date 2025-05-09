@@ -18,20 +18,6 @@ def enviar_mensagem(telefone, mensagem):
     payload = {"phone": telefone, "message": mensagem}
     requests.post(f"{API_BASE}/send-text", headers=HEADERS, json=payload)
 
-def enviar_botoes(telefone):
-    payload = {
-        "phone": telefone,
-        "message": "Sobre o que você gostaria de saber?",
-        "buttons": [
-            {"label": "📐 Tamanhos e preços", "value": "precos"},
-            {"label": "💰 Formas de pagamento", "value": "pagamento"},
-            {"label": "📍 Localização", "value": "localizacao"},
-            {"label": "📸 Imagens e vídeos", "value": "midia"},
-            {"label": "👤 Falar com um consultor", "value": "consultor"}
-        ]
-    }
-    requests.post(f"{API_BASE}/send-button", headers=HEADERS, json=payload)
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -39,7 +25,7 @@ def webhook():
         return jsonify({"status": "ignorado"})
 
     numero = data.get("phone") or data.get("message", {}).get("from")
-    mensagem = data.get("text", {}).get("message") or data.get("buttonResponse", {}).get("value") or data.get("message", "")
+    mensagem = data.get("text", {}).get("message") or data.get("message", "")
     if not numero or not mensagem:
         return jsonify({"status": "sem dados"})
 
@@ -51,23 +37,29 @@ def webhook():
         sessao["etapa"] = "nome"
 
     elif sessao["etapa"] == "nome":
-        sessao["nome"] = mensagem.strip().split(" ")[0].capitalize()
-        enviar_botoes(numero)
-        sessao["etapa"] = "botao"
+        nome = mensagem.strip().split(" ")[0].capitalize()
+        if nome.isalpha():
+            sessao["nome"] = nome
+            enviar_mensagem(numero, f"Prazer em te conhecer, {nome}! 😊\nSobre o que você gostaria de saber?\n1️⃣ Tamanhos e preços\n2️⃣ Pagamento\n3️⃣ Localização\n4️⃣ Imagens e vídeos\n5️⃣ Falar com um consultor")
+            sessao["etapa"] = "opcao"
+        else:
+            enviar_mensagem(numero, "Desculpe, não entendi. Qual o seu nome, por favor?")
 
-    elif sessao["etapa"] == "botao":
-        if mensagem == "precos":
+    elif sessao["etapa"] == "opcao":
+        if "1" in mensagem:
             enviar_mensagem(numero, "Os lotes do Avanti começam a partir de 500 m². O valor exato depende da localização. Posso te enviar uma proposta personalizada — posso seguir com isso?")
-        elif mensagem == "pagamento":
+        elif "2" in mensagem:
             enviar_mensagem(numero, "Temos financiamento direto com o empreendedor. Qual valor de entrada você pretende investir?")
             sessao["etapa"] = "entrada"
-        elif mensagem == "localizacao":
+        elif "3" in mensagem:
             enviar_mensagem(numero, "📍 O Avanti está às margens da rodovia em Lagoa da Prata: https://goo.gl/maps/FakeLink")
-        elif mensagem == "midia":
+        elif "4" in mensagem:
             enviar_mensagem(numero, "Veja as imagens: https://simbadigital.com.br/imagem/imagem1.webp\n🎥 Vídeo: https://simbadigital.com.br/video/Avanti-Drone-com-Audio-480p.mp4")
-        elif mensagem == "consultor":
+        elif "5" in mensagem:
             enviar_mensagem(numero, "Perfeito! Para agilizar seu atendimento, preciso de algumas informações.\nQual valor de entrada você pretende investir?")
             sessao["etapa"] = "entrada"
+        else:
+            enviar_mensagem(numero, "Por favor, responda com um número de 1 a 5.")
 
     elif sessao["etapa"] == "entrada":
         sessao["entrada"] = mensagem.strip()
